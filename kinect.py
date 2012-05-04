@@ -62,7 +62,13 @@ def in_field(cv_video, cv_depth):
                          cv.CV_RGB(255,0,0), cv.CV_RGB(0,0,255), 1000)
         contour = contour.h_next()
         (x, y, w, h) = bounding_rect
-        yield bounding_rect
+        #yield bounding_rect
+        
+    pyg_image = pygame.image.frombuffer(cv_video.tostring(),
+                                        cv.GetSize(cv_video), "RGB")
+    display.blit(pyg_image, (0,0))
+    pygame.display.flip()
+
 
 size = (640, 480)
 pygame.init()
@@ -83,13 +89,9 @@ while True:
     cv.SetData(cv_depth, np_depth.tostring())
     cv.SetData(cv_video, np_video.tostring())
 
-    # cv_hsv = cv_convert(cv_video, "rgb:hsv")
-    # hue = cv.CreateImage(cv.GetSize(cv_hsv), 8, 1)
-    # cv.Split(cv_hsv, hue, None, None, None)
-    # cv_backproject = cv.CreateImage(cv.GetSize(cv_video), 8, 1)
-    # cv.CalcArrBackProject( [hue], cv_backproject, cv_hist )
-
     kinect_rects = in_field(cv_video, cv_depth)
+
+    continue
 
     for x,y,w,h in kinect_rects:
         p1 = (x, y)
@@ -102,71 +104,8 @@ while True:
         #     cv.Circle(cv_video, coord, 2, cv.CV_RGB(255, 0, 0), 3)
         # cv.ResetImageROI(cv_video)
         
-
-    #     if w * h > 10000 and not track_window:
-    #         track_window = (x,y,w,h)            
-    #         sub = cv.GetSubRect(cv_video, (x,y,w,h))
-    #         save = cv.CloneMat(sub)
-    #         cv.ConvertScale(cv_video, cv_video, 0.5)
-    #         cv.Copy(save, sub)
-    #         cv.Rectangle(cv_video, (x,y), (x+w,y+h), (255,255,255))
-    #         sel = cv.GetSubRect(hue, track_window )
-    #         cv.CalcArrHist( [sel], cv_hist, 0)
-    #         (_, max_val, _, _) = cv.GetMinMaxHistValue(cv_hist)
-    #         if max_val != 0:
-    #             cv.ConvertScale(cv_hist.bins, cv_hist.bins, 255. / max_val)
-
-    # if track_window and track_window[2] > 0 and track_window[3] > 0:
-    #     (iters, (area, value, rect), track_box) = cv.CamShift(cv_backproject, track_window,
-    #                                                           ( cv.CV_TERMCRIT_EPS | cv.CV_TERMCRIT_ITER, 10, 1))
-    #     (x,y,w,h) = track_window
-    #     track_window = rect
-    #     sub = cv.GetSubRect(cv_video, (x,y,w,h))
-    #     save = cv.CloneMat(sub)
-    #     cv.ConvertScale(cv_video, cv_video, 0.5)
-    #     cv.Copy(save, sub)
-    #     cv.Rectangle(cv_video, (x,y), (x+w,y+h), (0,0,255))
-    #     sel = cv.GetSubRect(hue, track_window )
-    #     cv.CalcArrHist( [sel], cv_hist, 0)
-    #     (_, max_val, _, _) = cv.GetMinMaxHistValue(cv_hist)
-    #     if max_val != 0:
-    #         cv.ConvertScale(cv_hist.bins, cv_hist.bins, 255. / max_val)
-    #         #        cv.EllipseBox(cv_video, track_window, cv.CV_RGB(0,255,255), 1, cv.CV_AA, 0 )
-
-
     pyg_image = pygame.image.frombuffer(cv_video.tostring(),
                                         cv.GetSize(cv_video), "RGB")
     display.blit(pyg_image, (0,0))
     pygame.display.flip()
-
-
-    #         track_window = bound_rect
-    #     if track_window:
-    #         cv_hsv = cv_convert(cv_rgb, "bgr:hsv")
-    #         hue = cv.CreateImage(cv.GetSize(cv_hsv), 8, 1)
-    #         cv.Split(cv_hsv, hue, None, None, None)
-    #         cv_backproject = cv.CreateImage(cv.GetSize(cv_rgb), 8, 1)
-    #         cv.CalcArrBackProject( [hue], cv_backproject, hist )
-    #         crit = ( cv.CV_TERMCRIT_EPS | cv.CV_TERMCRIT_ITER, 10, 1)
-    #         (iters, (area, value, rect), track_box) = cv.CamShift(cv_backproject, track_window, crit)
-    #         p1 = (rect[0], rect[1])
-    #         p2 = (rect[0] + rect[2],
-    #                rect[1] + rect[3])
-    #         cv.Rectangle(cv_rgb, p1, p2, cv.CV_RGB(244,255,0), 1)
-
-        
-    # # if len(points):
-    # #     center_point = reduce(lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), points)
-    # #     cv.Circle(cv_rgb, center_point, 40, cv.CV_RGB(255, 255, 255), 1)
-    # #     cv.Circle(cv_rgb, center_point, 30, cv.CV_RGB(255, 100, 0), 1)
-    # #     cv.Circle(cv_rgb, center_point, 20, cv.CV_RGB(255, 255, 255), 1)
-    # #     cv.Circle(cv_rgb, center_point, 10, cv.CV_RGB(255, 100, 0), 1)
-
-    # pyg_image = pygame.image.frombuffer(cv_rgb.tostring(),
-    #                                     cv.GetSize(cv_rgb), "RGB")
-
-    #     #    display.fill([0x00, 0x00, 0xff])
-
-    # display.blit(pyg_image, (0,0))
-    # pygame.display.flip()
     
