@@ -1,6 +1,7 @@
 import cv, pygame, numpy
 from pygame.locals import *
-from freenect import sync_get_depth as get_depth, sync_get_video as get_video
+from freenect import sync_get_depth as get_depth, sync_get_video as get_video, set_tilt_degs, VIDEO_IR_8BIT
+from math import hypot
 
 def cv_duplicate(cv_src):
     size = cv.GetSize(cv_src)
@@ -50,8 +51,8 @@ def featurefinder(cvimage, n=150):
 
 def in_field(cv_video, cv_depth):
     cv_tmp = cv_duplicate(cv_depth)
-    cv.Dilate(cv_tmp, cv_tmp, None, 1)
-    cv.Erode(cv_tmp, cv_tmp, None, 1)
+    cv.Dilate(cv_tmp, cv_tmp, None, 10)
+    cv.Erode(cv_tmp, cv_tmp, None, 10)
     cv.And(cv_tmp, cv_video, cv_tmp)
     cv_bnw = cv_convert(cv_tmp, "rgb:gray")
     storage = cv.CreateMemStorage(0)
@@ -59,53 +60,77 @@ def in_field(cv_video, cv_depth):
     while contour:
         bounding_rect = cv.BoundingRect(list(contour))
         cv.DrawContours(cv_video, contour,
-                         cv.CV_RGB(255,0,0), cv.CV_RGB(0,0,255), 1000)
+                        cv.CV_RGB(0,0,0), cv.CV_RGB(0,255,255), 10000)
         contour = contour.h_next()
-        (x, y, w, h) = bounding_rect
-        #yield bounding_rect
+        yield bounding_rect # (x, y, w, h)
+
+def closest_to(points, p=(0,0)):
+    f = lambda a,b: cmp(hypot(((a[0] + a[2]) / 2) - p[0], ((a[1] + a[3]) / 2) - p[1]),
+                        hypot(((b[0] + b[2]) / 2) - p[0], ((b[1] + b[3]) / 2) - p[1]))
+    return sorted(points, cmp=f)
+
+if __name__ == '__main__':
+    size = (640, 480)
+    pygame.init()
+    display = pygame.display.set_mode(size, 0)
+
+    cv_video, cv_depth = (cv.CreateImageHeader(size, cv.IPL_DEPTH_8U, cv.CV_16S),
+                          cv.CreateImageHeader(size, cv.IPL_DEPTH_8U, cv.CV_16S))
+
+    cv_hist = cv.CreateHist([180], cv.CV_HIST_ARRAY, [(0,180)], 1 )
+    track_window = None
+    
+    depth, near, far=(600, 600, 0)
+
+    while True:
+        for e in pygame.event.get():
+            if e.type == QUIT or (e.type == KEYDOWN and e.key == K_ESCAPE):
+                exit(0)
+            if e.type == KEYDOWN and e.key == K_r:
+                track_window = None
         
-    pyg_image = pygame.image.frombuffer(cv_video.tostring(),
-                                        cv.GetSize(cv_video), "RGB")
-    display.blit(pyg_image, (0,0))
-    pygame.display.flip()
+        (np_video, _), (np_depth, _) = get_video(), get_depth()
 
+        np_depth = 255 * numpy.logical_and(np_depth >= depth - near,
+                                           np_depth <= depth + far)
+        np_depth = numpy.dstack((np_depth, np_depth, np_depth)).astype(numpy.uint8).reshape(size[1], size[0], 3)
 
-size = (640, 480)
-pygame.init()
-display = pygame.display.set_mode(size, 0)
+        cv.SetData(cv_depth, np_depth.tostring())
+        cv.SetData(cv_video, np_video.tostring())
+        #
+        cv_hsv = cv.CreateImage(cv.GetSize(cv_video), 8, 3)
+        cv.CvtColor(cv_video, cv_hsv, cv.CV_RGB2HSV)
+        cv_hue = cv.CreateImage(cv.GetSize(cv_video), 8, 1)
+        cv.Split(cv_hsv, cv_hue, None, None, None)
+        cv_backproject = cv.CreateImage(cv.GetSize(cv_video), 8, 1)
+        cv.CalcArrBackProject([cv_hue], cv_backproject, cv_hist )
+        #
+        if not track_window:
+            kinect_rects = in_field(cv_video, cv_depth)
+            from_center = closest_to(kinect_rects, p=(size[0]/2, size[1]/2))
+            for x,y,w,h in from_center:
+                p1 = (x, y)
+                p2 = (x + w, y + h)
+                cv.Rectangle(cv_video, p1, p2, cv.CV_RGB(0,0,255), 1)
+                cv.SetImageROI(cv_hue, (x,y,w,h))
+                cv.CalcArrHist( [cv_hue], cv_hist, 0)
+                (_, max_val, _, _) = cv.GetMinMaxHistValue(cv_hist)
+                if max_val != 0:
+                    cv.ConvertScale(cv_hist.bins, cv_hist.bins, 255.0 / max_val)
+                cv.ResetImageROI(cv_hue)
+                track_window = (x,y,w,h)
+                break
+        else:
+            crit = ( cv.CV_TERMCRIT_EPS | cv.CV_TERMCRIT_ITER, 10, .01)
+            try:
+                (iters, (area, value, rect), track_box) = cv.CamShift(cv_backproject, track_window, crit)
+                track_window = rect           
+                cv.EllipseBox(cv_video, track_box, cv.CV_RGB(255,0,0), 3, cv.CV_AA, 0 )
+            except:
+                    track_window = None
 
-cv_video, cv_depth = (cv.CreateImageHeader(size, cv.IPL_DEPTH_8U, cv.CV_16S),
-                      cv.CreateImageHeader(size, cv.IPL_DEPTH_8U, cv.CV_16S))
-
-while True:
-    depth=600
-    near, far=(200, 200)
-    (np_video, _), (np_depth, _) = get_video(), get_depth()
-
-    np_depth = 255 * numpy.logical_and(np_depth >= depth - near,
-                                       np_depth <= depth + far)
-    np_depth = numpy.dstack((np_depth, np_depth, np_depth)).astype(numpy.uint8).reshape(size[1], size[0], 3)
-
-    cv.SetData(cv_depth, np_depth.tostring())
-    cv.SetData(cv_video, np_video.tostring())
-
-    kinect_rects = in_field(cv_video, cv_depth)
-
-    continue
-
-    for x,y,w,h in kinect_rects:
-        p1 = (x, y)
-        p2 = (x + w, y + h)
-        cv.Rectangle(cv_video, p1, p2, cv.CV_RGB(0,0,255), 1)
-        # cv.SetImageROI(cv_video, (x,y,w,h))
-        # features = featurefinder(cv_video)
-        # for x, y in features:
-        #     coord = (int(x), int(y))
-        #     cv.Circle(cv_video, coord, 2, cv.CV_RGB(255, 0, 0), 3)
-        # cv.ResetImageROI(cv_video)
-        
-    pyg_image = pygame.image.frombuffer(cv_video.tostring(),
-                                        cv.GetSize(cv_video), "RGB")
-    display.blit(pyg_image, (0,0))
-    pygame.display.flip()
+        pyg_image = pygame.image.frombuffer(cv_video.tostring(),
+                                            cv.GetSize(cv_video), "RGB")
+        display.blit(pyg_image, (0,0))
+        pygame.display.flip()
     
